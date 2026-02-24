@@ -1,0 +1,3 @@
+[submodule "external/spm-headers"]
+	path = external/spm-headers
+	url = https://github.com/Perodi/spm-headers.git
