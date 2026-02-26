@@ -1,0 +1,6 @@
+preloader: build/spm build/spm/heap_patch.bin
+build/spm/heap_patch.bin: source/preloader/heap_patch.s
+	$(ASSEMBLER) -mbroadway $< -o $@.o
+	$(LINKER) -T linker/asm_to_binary.ld $@.o -o $@
+	rm $@.o
+	touch $@
