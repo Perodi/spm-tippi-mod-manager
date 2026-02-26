@@ -17,6 +17,7 @@
     .set r22, 22
     .set r23, 23
 
+# MARK:
     .data
 memInit:
     .long 0x801A5DCC, 0x801A5DCC, 0             # eu0, eu1
@@ -69,6 +70,7 @@ newSizeTableKorea:
     .long 0x1, 0x3AE0       # MEM2_HEAP_6 (Grows to about 14.7 MB, to account for the additional heap)
 newSizeTableKorea_end:
 
+# MARK:
     .text
 
     # Setup stack frame (prologue)
