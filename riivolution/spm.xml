@@ -1,0 +1,16 @@
+<wiidisc version="1">
+    <options>
+        <section name="Tippi Mod Manager">
+            <option name="Rel Loader">
+                <choice name="Enabled">
+                    <patch id="rel_loader" />
+                </choice>
+            </option>
+        </section>
+    </options>
+    <patch id="rel_loader">
+        <file disc="/rel/mod.rel" external="/riivolution/spm/mod.rel" create="true" />
+        <memory ocarina="true" value="3C8080003C60802738A40040" offset="0x81235000" />
+        <memory valuefile="/riivolution/spm/preloader.bin" offset="0x81235000" />
+    </patch>
+</wiidisc>
