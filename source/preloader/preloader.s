@@ -1,17 +1,17 @@
-# --------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------
 # Region info codes (xxxxxxxx .....ABB)
 # xxxxxxxx: Offset into pointer arrays
 # A: Needs patch for memInit()
 # BB: Last released version
-# --------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------
     .set EU_INFO, 0b0000000000000010
     .set JP_INFO, 0b0000100000000110
     .set KR_INFO, 0b0001000000000001
     .set NA_INFO, 0b0001010000000111
 
-# --------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------
 # Preloader common aliases
-# --------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------
     .set stack_ptr, %r1
 
     .set region, %r29
@@ -22,8 +22,9 @@
 
     .global preloader
 
+    .section .text
 # ------------------------------------------------------------------------------------------------
-# Prologue
+# Prologue: Start of preloader execution
 # ------------------------------------------------------------------------------------------------
 preloader:
     .set frame_size, 0x20
@@ -103,8 +104,8 @@ patch_rel_main_params:
 
     # Loop through all the data until the split marker, copying over the new table
 size_table_loop:
-    lwz %r6, 0 (table_ptr)                    # Load the replacement value from the new table
-    stw %r6, 0 (original_ptr)                 # Store the replacement value in the game's table
+    lwz %r6, 0 (table_ptr)                      # Load the replacement value from the new table
+    stw %r6, 0 (original_ptr)                   # Store the replacement value in the game's table
 
     addi table_ptr, table_ptr, 4                # Increment the two pointers
     addi original_ptr, original_ptr, 4
@@ -156,6 +157,12 @@ patch_rel_string:
 
 
 
+# ------------------------------------------------------------------------------------------------
+# Include subroutine files (literally just shoves in their contents)
+# ------------------------------------------------------------------------------------------------
+.include "identify.s"
+.include "memory_patch.s"
+
 
 # ------------------------------------------------------------------------------------------------
 # Data
@@ -165,24 +172,29 @@ rel_string:
     .string "mod.rel"
 rel_string_end:
 
+# Array of pointers to memInit() in each version, note the order matters for these arrays
 mem_init_ptrs:
     .long 0x801a5dcc, 0x801a5dcc                # eu0, eu1
     .long 0x801a5184, 0x801a51cc                # jp0, jp1
     .long 0x8019e6a4                            # kr0
     .long 0x801a5194, 0x801a51f0, 0x801a5508    # us0, us1, us2
 
+# Array of pointers to size_table in each version
 size_table_ptrs:
     .long 0x8042a408, 0x8042a408                # eu0, eu1
     .long 0x803bfc68, 0x803c0de8                # jp0, jp1
     .long 0x8045b3c8                            # kr0
     .long 0x803eaa08, 0x803ebd68, 0x803ebf48    # us0, us1, us2
 
+# Array of pointers to relMain() in each version
 rel_main_ptrs:
     .long 0x8023e444, 0x8023e444                # eu0, eu1
     .long 0x8023bdf8, 0x8023c4a4                # jp0, jp1
     .long 0x80236b10                            # kr0
     .long 0x8023be50, 0x8023c53c, 0x8023c860    # us0, us1, us2
 
+# Array of patch pairs for memInit(), containing an address offset and replacement instruction
+# These instructions are currently hardcoded to be inserted as-is into memory.
 mem_init_patches:
     .long 0xa0, 0x2c1d0003      # cmpwi r29, 0x5        ->  cmpwi r29, 0x3      First while loop
     .long 0x178, 0x2c1b0003     # cmpwi r27, 0x5        ->  cmpwi r27, 0x3      Second while loop
@@ -197,17 +209,20 @@ mem_init_patches:
     .long 0x348, 0x3b00000c     # li r24, 0x14          ->  li r24, 0xC         ...
 mem_init_patches_end:
 
+# Array of patch pairs for relMain()
 rel_main_patches:
-    .long 0x1c, 0x2c000002
-    .long 0x20, 0x41820184
-    .long 0xac, 0x48000018
-    .long 0xb0, 0x39080001
-    .long 0xb4, 0x99030008
-rel_main_kr:
-    .long 0xb8, 0x810d82a8
-    .long 0xbc, 0x99080008
-    .long 0x19c, 0x89030008
-    .long 0x1a0, 0x4bffff10
+    .long 0x1c, 0x2c000002      # cmpwi r0, 0x0         -> cmpwi r0, 0x2            Change the check from if a rel is loaded to if two rels have been loaded
+    .long 0x20, 0x41820184      # bne 0x184             -> beq 0x184                ...
+    
+    .long 0xac, 0x48000018      # cmplwi r0, -1         -> b 0x28                   Remove the safety check branch to just always assume things are fine and branch
+    .long 0xb0, 0x39080001      # bne 0x24              -> addi r8, r8, 1           Replace old branch with increment to relLoaded, will be used later 
+    .long 0xb4, 0x99030008      # lwz r3, -0x7d60 (r13) -> stb r8, 0x8 (r3)         Store the incremented relLoaded into RelWork
+rel_main_kr:                    # Marks the instruction that needs changed for the Korean release
+    .long 0xb8, 0x810d82a8      # li r0, 0x1            -> lwz r8, -0x7d58 (r13)    Load pointer to the compressed rel name
+    .long 0xbc, 0x99080008      # stb r0, 0x8 (r3)      -> stb r8, 0x8 (r8)         Sneaky way of corrupting the compressed rel name in one instruction so it doesn't load it twice
+                                # The branch here remains unchanged, since it already jumps back to the end of the function
+    .long 0x19c, 0x89030008     # li r0, 0x1            -> lbz r8, 0x8 (r3)         Load the current relloaded value into r8
+    .long 0x1a0, 0x4bffff10     # stb r0, 0x8 (r3)      -> b -0x240                 Branch up to the patched code above (starting at offset 0xac)
 rel_main_patches_end:
 
 size_table:
@@ -217,17 +232,14 @@ size_table:
     .long 0x1, 0x100        # EXT_HEAP (moved to MEM2 if not already)
     .long 0x1, 0x100        # EFFECT_HEAP (moved to MEM2 if not already)
     .long 0x1, 0x80         # WPAD_HEAP (no change)
-    .long 0x1, 0x4000       # SOUND_HEAP (shrink by 1 MB)
+    .long 0x1, 0x4400       # SOUND_HEAP (no change)
     .long 0x0, 100          # SMART_HEAP (will shrink by about 15 MB)
 size_table_split:
-    .long 0x1, 0x4000       # MEM2_HEAP_6 (grows to 16 MB, for dedicated mod usage)
+    .long 0x1, 0x2000       # MEM2_HEAP_6 (Expand to 8 MB, for dedicated mod usage)
 size_table_end:
 
+# Starts from size_table_split
 size_table_kr:
     .long 0x1, 0x520        # Extra KR heap. Everything else is the same, but MEM2_HEAP_6 is smaller
-    .long 0x1, 0x3ae0       # MEM2_HEAP_6 (Grows to about 14.7 MB, to account for the additional heap)
+    .long 0x1, 0x1ae0       # MEM2_HEAP_6 (Grows to about 6.7 MB, to account for the additional heap)
 size_table_kr_end:
-
-.include "common.s"
-.include "identify.s"
-.include "memory_patch.s"

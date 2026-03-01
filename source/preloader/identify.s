@@ -2,21 +2,25 @@
 
     .global identify
 
-    .section .text
-
     .set ID_HIGH, 0x5238                        # "R8"
     .set ID_EU, 0x5050                          # "PP"
     .set ID_JP, 0x504A                          # "PJ"
     .set ID_KR, 0x504B                          # "PK"
     .set ID_NA, 0x5045                          # "PE"
 
-identify:
-    # Returns
+    .section .text
+
+# ------------------------------------------------------------------------------------------------
+# Subroutine returns
+# ------------------------------------------------------------------------------------------------
     .set region, %r3
     .set revision, %r4
     .set array_offset, %r5
 
-    # Prologue
+# ------------------------------------------------------------------------------------------------
+# Prologue
+# ------------------------------------------------------------------------------------------------
+identify:
     .set frame_size, 0x10
     .set lr_offset, 0x4
 
@@ -24,6 +28,9 @@ identify:
     mflr %r0                                    # Load link register
     stw %r0, frame_size+lr_offset (stack_ptr)   # Save link register in stack frame
 
+# ------------------------------------------------------------------------------------------------
+# Verify valid game id and region
+# ------------------------------------------------------------------------------------------------
     # Load game id, region, and revision from 0x80000000
     .set id, %r3
     lis id, 0x8000                              # Load pointer to the game id (0x80000000)
@@ -54,6 +61,9 @@ identify:
     
     b error                                     # Otherwise return error
 
+# ------------------------------------------------------------------------------------------------
+# Check game revision number is valid for the given region
+# ------------------------------------------------------------------------------------------------
 check_revision:
     .set last_revision, %r6
 
@@ -67,7 +77,9 @@ check_revision:
     cmpl 0, revision, last_revision             # Check if the revision number is in the correct range
     bgt error                                   # If not, return error
 
-    # Get array offset
+# ------------------------------------------------------------------------------------------------
+# Calculate array offset for the pointer tables (mem_init_ptrs, etc.)
+# ------------------------------------------------------------------------------------------------
     andi. array_offset, region, 0xFF00          # Get the region offset from the region info
     srawi array_offset, array_offset, 8         # Shift the region offset to get the correct number
     addi %r6, revision, -1                      # Subtract 1 from the revision to make zero indexed
